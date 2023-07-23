@@ -1,6 +1,6 @@
 'use client';
 
-import React, {useEffect, useRef, useState} from 'react';
+import React, {ReactNode, useEffect, useRef, useState} from 'react';
 
 
 interface Coords {
@@ -8,115 +8,268 @@ interface Coords {
     y: number;
 }
 
-interface UnitCoords {
+interface Event {
+    comp: ReactNode;
+    UX: number;
+    UY: number;
+    UH: number;
+    BG?: string;
+}
+
+interface DropEvent {
+    index: number;
     UX: number;
     UY: number;
 }
 
 interface CalProps {
-    cols: {}[];
+    colHeaders: {
+        header: string;
+    }[];
+    sideRows: {
+        comp: ReactNode;
+        UY: number;
+    }[];
+    unitYHeightPx: number;
+    unitXWidthPx: number;
+    yUnitCount: number;
+    sideRowWidthPx: number;
+    events: Event[];
+    onDrop?: (data: DropEvent) => void;
 }
 
 export default function Cal(props: CalProps) {
 
     const node = useRef<HTMLDivElement | null>(null);
-    const [unitYHeight] = useState<number>(20);
-    const [unitXWidth] = useState<number>(100);
+    const [overlapData, setOverlapData] = useState<{index: number}[][]>([]);
+    const [boxes, setBoxes] = useState<Event[]>([]);
 
-    const [boxes, setBoxes] = useState<{
-        UX: number;
-        UY: number;
-        uHeight: number;
-    }[]>([
-        {
-            UX: 0,
-            UY: 0,
-            uHeight: 10,
-        },
-        {
-            UX: 2,
-            UY: 0,
-            uHeight: 10,
-        }
-    ]);
+    const recalOverlapData = (newBoxes: {UX: number, UY: number, UH: number}[]) => {
+        // recalculate all overlaps with new position
+        const newOverlapData: {index: number}[][] = [];
+        const singles: {index: number}[] = newBoxes.map((box, i) => ({index: i}));
 
-    return <div className={'position-relative'} ref={node}>
-        <div className={'d-flex'}>
-            {
-                props.cols.map((col, i) => {
-                    return (
-                        <Column key={i}/>
-                    );
-                })
+        for (let i = 0; i < singles.length; i++) {
+            const single = singles[i];
+            const overlaps = [single];
+            const virtualHeight = newBoxes[single.index].UH;
+            const virtualTop = newBoxes[single.index].UY;
+            for (let j = 0; j < singles.length; j++) {
+                if (i !== j && newBoxes[single.index].UX === newBoxes[singles[j].index].UX) {
+                    const other = singles[j];
+                    const otherTop = newBoxes[other.index].UY;
+                    const otherHeight = newBoxes[other.index].UH;
+
+                    // if other box is overlapping with virtual box
+                    if (!(
+                        virtualTop + virtualHeight <= otherTop ||
+                        virtualTop >= otherTop + otherHeight
+                    )) {
+                        overlaps.push(other);
+                        // remove other from singles
+                        singles.splice(j, 1);
+                        // reset j
+                        j = 0;
+                    }
+                }
             }
-        </div>
-
-        {
-            boxes.map((box, i) => {
-                return (
-                    <Box
-                        key={i}
-                        top={box.UY * unitYHeight}
-                        left={box.UX * unitXWidth}
-                        onDrag={(mousePosPx, initialMousePosPx, initialBoxPosPx) => {
-                            const UX = Math.floor(mousePosPx.x / unitXWidth);
-                            // const UYMouse = Math.floor((mousePosPx.y < 0 ? 0 : mousePosPx.y) / unitYHeight);
-                            const UYMouse = Math.floor(mousePosPx.y / unitYHeight);
-                            const UYIniMouse = Math.floor(initialMousePosPx.y / unitYHeight);
-                            const UYIniBox = Math.floor(initialBoxPosPx.y / unitYHeight);
-                            const dd = {
-                                UY: UYMouse - UYIniMouse + UYIniBox,
-                                UX: UX,
-                                uHeight: box.uHeight,
-                            };
-
-                            const diff = Math.abs(dd.UY - box.UY);
-
-                            if (dd.UY >= 0 && dd.UX >= 0 && diff <= 4) {
-                                const newBoxes = [...boxes];
-                                newBoxes[i] = dd;
-                                setBoxes(newBoxes);
-                            }
-                        }}
-                        heightPx={box.uHeight * unitYHeight}
-                        widthPx={1 * unitXWidth}
-                        onResize={(heightPx: number) => {
-                            const newBoxes = [...boxes];
-                            newBoxes[i].uHeight = Math.round(heightPx/ unitYHeight);
-                            setBoxes(newBoxes);
-                        }}
-                    />
-                );
-            })
+            if (overlaps.length > 1)
+                newOverlapData.push(overlaps);
         }
-    </div>;
+
+        setOverlapData(newOverlapData);
+    };
+
+    useEffect(() => {
+        setBoxes(props.events);
+        recalOverlapData(props.events);
+    }, [props.events]);
+
+    return (
+        <div>
+            <div className={'d-flex'} style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                backgroundColor: 'white',
+            }}>
+                <div style={{
+                    width: props.sideRowWidthPx,
+                }}>
+
+                </div>
+                {
+                    props.colHeaders.map((col, i) => {
+                        return (
+                            <div key={i} style={{
+                                width: props.unitXWidthPx,
+                                border: '1px solid #ccc',
+                                textAlign: 'center',
+                            }}>
+                                {col.header}
+                            </div>
+                        );
+                    })
+                }
+            </div>
+            <div className={'position-relative'} ref={node}>
+                <div className={'d-flex'}>
+                    <div style={{
+                        width: props.sideRowWidthPx,
+                        backgroundColor: '#eee',
+                    }}>
+                        {
+                            props.sideRows.map((col, i) => {
+                                return (
+                                    <div key={i} style={{
+                                        height: col.UY * props.unitYHeightPx,
+                                        border: '1px solid #ccc',
+                                        textAlign: 'center',
+                                    }}>
+                                        {col.comp}
+                                    </div>
+                                );
+                            })
+                        }
+                    </div>
+                    {
+                        props.colHeaders.map((col, i) => {
+                            return (
+                                <Column
+                                    key={i}
+                                    singleXUnitPx={props.unitXWidthPx}
+                                    singleYUnitPx={props.unitYHeightPx}
+                                    yUnitCount={props.yUnitCount}
+                                />
+                            );
+                        })
+                    }
+                </div>
+                {
+                    boxes.map((box, i) => {
+
+                        // if this id is in overlapData
+                        let oData: {index: number}[];
+
+                        for (let j = 0; j < overlapData.length; j++) {
+                            for (let k = 0; k < overlapData[j].length; k++) {
+                                if (overlapData[j][k].index === i) {
+                                    oData = overlapData[j];
+                                    j = overlapData.length; // break out of outer loop
+                                    break;
+                                }
+                            }
+                        }
+                        let boxOverlapData: {index: number, size: number};
+
+                        if (oData) {
+                            let index;
+                            let size = oData.length;
+                            for (let j = 0; j < oData.length; j++) {
+                                if (oData[j].index === i) {
+                                    index = j;
+                                }
+                            }
+                            boxOverlapData = {
+                                index: index,
+                                size: size,
+                            };
+                        }
+
+                        return (
+                            <Box
+                                key={i}
+                                top={box.UY * props.unitYHeightPx}
+                                left={box.UX * props.unitXWidthPx + props.sideRowWidthPx}
+                                overlapData={boxOverlapData}
+                                comp={box.comp}
+                                onDrag={(mousePosPx, initialMousePosPx, initialBoxPosPx) => {
+                                    //@ts-ignore
+                                    const nodePosPx = {
+                                        x: node?.current?.getBoundingClientRect().x || 0,
+                                        y: node?.current?.getBoundingClientRect().y || 0,
+                                    };
+                                    const UX = Math.floor(Math.abs(mousePosPx.x - nodePosPx.x - props.sideRowWidthPx) / props.unitXWidthPx);
+                                    // const UYMouse = Math.floor((mousePosPx.y < 0 ? 0 : mousePosPx.y) / props.unitYHeightPx);
+                                    const UYMouse = Math.floor((mousePosPx.y - nodePosPx.y) / props.unitYHeightPx);
+                                    const UYIniMouse = Math.floor((initialMousePosPx.y - nodePosPx.y) / props.unitYHeightPx);
+                                    const UYIniBox = Math.floor((initialBoxPosPx.y) / props.unitYHeightPx);
+
+                                    const nextMove = {
+                                        ...box,
+                                        UY: UYMouse - UYIniMouse + UYIniBox,
+                                        UX: UX,
+                                    };
+
+                                    const diff = Math.abs(nextMove.UY - box.UY);
+
+                                    if (nextMove.UY >= 0 && nextMove.UX >= 0 && diff <= 4) {
+                                        const newBoxes = [...boxes];
+                                        newBoxes[i] = nextMove;
+                                        setBoxes(newBoxes);
+
+                                        recalOverlapData(newBoxes);
+                                    }
+                                }}
+                                heightPx={box.UH * props.unitYHeightPx}
+                                widthPx={1 * props.unitXWidthPx}
+                                onResize={(heightPx: number) => {
+                                    const newBoxes = [...boxes];
+                                    newBoxes[i].UH = Math.round(heightPx / props.unitYHeightPx);
+                                    setBoxes(newBoxes);
+
+                                    recalOverlapData(newBoxes);
+                                }}
+                                BG={box.BG}
+                                onDrop={async () => {
+                                    if (props.onDrop) {
+                                        const result = await props.onDrop({
+                                            index: i,
+                                            UX: box.UX,
+                                            UY: box.UY,
+                                        });
+
+                                        if (result === false) {
+                                            setBoxes(props.events);
+                                            recalOverlapData(props.events);
+                                        }
+                                    }
+                                }}
+                            />
+                        );
+                    })
+                }
+            </div>
+        </div>
+    );
 }
 
-
-function Column() {
-
+function Column(props: {
+    singleYUnitPx: number;
+    yUnitCount: number;
+    singleXUnitPx: number;
+}) {
 
     return (
         <div
-            className={'bg-info'}
+            className={''}
             style={{
-                height: '500px',
-                width: '100px',
+                height: props.yUnitCount * props.singleYUnitPx,
+                width: props.singleXUnitPx,
             }}
         >
             {
-                Array.from(Array(25).keys()).map((i) => {
+                Array.from(Array(props.yUnitCount).keys()).map((i) => {
                     return (
                         <div key={i} className={'sg'} style={{
-                            height: '20px',
-                            width: '100px',
+                            height: props.singleYUnitPx,
+                            width: '100%',
                         }}>
                             {/*{i}*/}
                         </div>
                     );
                 })
             }
-
             <style jsx={true}>{`
               .rr {
                 height: 20px;
@@ -124,7 +277,7 @@ function Column() {
               }
 
               .sg {
-                border: .3px solid rgba(93, 93, 93, 0.2);
+                border: .3px solid rgba(93, 93, 93, 0.1);
                 user-select: none;
               }
             `}</style>
@@ -139,6 +292,13 @@ interface BoxProps {
     heightPx: number;
     widthPx: number;
     onResize?: (heightPx: number) => void;
+    overlapData?: {
+        index: number;
+        size: number;
+    };
+    comp: ReactNode;
+    BG?: string;
+    onDrop?: () => void;
 }
 
 function Box(props: BoxProps) {
@@ -163,12 +323,17 @@ function Box(props: BoxProps) {
         setInitialMousePosition({x: e.clientX, y: e.clientY});
         setInitialBoxPosition({x: props.left, y: props.top});
         setResizeDragging(true);
+        setDragging(false);
     };
 
     const handleMouseUp = (e) => {
         setDragging(false);
         setEnableDragging(false);
         setResizeDragging(false);
+
+        if (dragging && !resizeDragging && props.onDrop) {
+            props.onDrop();
+        }
 
         setInitialMousePosition(undefined);
         setInitialBoxPosition(undefined);
@@ -202,42 +367,125 @@ function Box(props: BoxProps) {
         };
     }, [dragging, position, enableDragging, resizeDragging, initialMousePosition, initialBoxPosition]);
 
+    const getOverlapLeftWidth = () => {
+
+        const overlapData = props.overlapData;
+        let width = props.widthPx;
+        let left = props.left < 0 ? 0 : props.left;
+        if (!overlapData) return {
+            width,
+            left,
+        };
+
+        width = props.widthPx / overlapData.size;
+        left = props.left + (width * overlapData.index);
+
+        return {width, left};
+    };
+
+    const dragHeight = 7;
+
     return (
         <div
             className={'position-absolute bx1'}
             style={{
                 height: props.heightPx,
-                width: props.widthPx,
+                width: getOverlapLeftWidth().width,
                 top: props.top < 0 ? 0 : props.top,
-                left: props.left < 0 ? 0 : props.left,
+                // left: props.left < 0 ? 0 : props.left,
+                left: getOverlapLeftWidth().left,
             }}
         >
-            <div
-                onMouseDown={handleMouseDown}
-                className={'bg-danger'}
-                style={{
-                    height: 'calc(100% - 7px)',
-                    width: '100%',
-                }}
-            />
-            <div
-                style={{
-                    bottom: '0',
-                    left: '0',
-                    height: '7px',
-                    width: '100%',
-                    backgroundColor: 'black',
-                    cursor: 'n-resize',
-                }}
-                onMouseDown={handleResizeMouseDown}
-            />
+            <div className={'position-relative h-100'}>
+
+                <div
+                    onMouseDown={handleMouseDown}
+                    style={{
+                        // height: `calc(100% - ${dragHeight}px)`,
+                        height: '100%',
+                        zIndex: 1,
+                        width: '100%',
+                        cursor: 'move',
+                        border: '1px solid #aaa',
+                        borderBottom: 'none',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        // padding: '4px',
+                        // paddingLeft: '8px',
+                        backgroundColor: props.BG || '#fff',
+                    }}
+                >
+                    {props.comp}
+
+                </div>
+                <div
+                    style={{
+                        // bottom: `-${dragHeight}px`,
+                        top: `calc(100% - ${dragHeight}px)`,
+                        position: 'absolute',
+                        zIndex: 10,
+                        left: '0',
+                        height: dragHeight,
+                        width: '100%',
+                        // backgroundColor: props.isBlock ? '#E6E6E6' : '#fff',
+                        cursor: 'n-resize',
+                        border: '1px solid #aaa',
+                        borderTop: 'none',
+                    }}
+                    onMouseDown={handleResizeMouseDown}
+                />
+            </div>
+
 
             <style jsx={true}>{`
               .bx1 {
-                transition: all 0.1s ease-in-out;
+                //transition: all 0.05s ease-in-out;
               }
             `}</style>
         </div>
     );
 }
 
+
+// {/*{*/}
+// {/*    !props.isBlock && (*/}
+// {/*        <>*/}
+// {/*            <span className={'text-muted d-block'} style={{*/}
+// {/*                fontSize: '11px',*/}
+// {/*            }}>*/}
+// {/*                11.45 - 12.45*/}
+// {/*            </span>*/}
+// {/*            <span className={'fw-bold'} style={{*/}
+// {/*                fontSize: '15px',*/}
+// {/*            }}>*/}
+// {/*                Kele Aistrope*/}
+// {/*            </span>*/}
+// {/*            <span className={'text-muted d-block'} style={{*/}
+// {/*                fontSize: '13px',*/}
+// {/*            }}>*/}
+// {/*                Builder Gel Manicure*/}
+// {/*            </span>*/}
+// {/*        </>*/}
+// {/*    )*/}
+// {/*}*/}
+// {/*{*/}
+// {/*    props.isBlock && (*/}
+// {/*        <>*/}
+// {/*            <span className={'text-muted d-block'} style={{*/}
+// {/*                fontSize: '13px',*/}
+// {/*            }}>*/}
+// {/*                Launch*/}
+// {/*            </span>*/}
+// {/*        </>*/}
+// {/*    )*/}
+// {/*}*/}
+// {/*<div*/}
+// {/*    style={{*/}
+// {/*        position: 'absolute',*/}
+// {/*        top: '0',*/}
+// {/*        left: '0',*/}
+// {/*        bottom: '0',*/}
+// {/*        width: '4px',*/}
+// {/*        backgroundColor: props.isBlock ? '#B3B3B3' : '#66B476',*/}
+// {/*    }}*/}
+// {/*/>*/}
