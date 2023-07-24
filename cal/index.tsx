@@ -9,7 +9,7 @@ interface Coords {
 }
 
 interface Event {
-    comp: ReactNode;
+    comp: {id: number};
     UX: number;
     UY: number;
     UH: number;
@@ -20,6 +20,11 @@ interface DropEvent {
     index: number;
     UX: number;
     UY: number;
+}
+
+interface ResizeEvent {
+    index: number;
+    UH: number;
 }
 
 interface CalProps {
@@ -34,8 +39,10 @@ interface CalProps {
     unitXWidthPx: number;
     yUnitCount: number;
     sideRowWidthPx: number;
+    Renderer: ReactNode;
     events: Event[];
     onDrop?: (data: DropEvent) => void;
+    onResizeComplete?: (data: ResizeEvent) => void;
 }
 
 export default function Cal(props: CalProps) {
@@ -81,9 +88,17 @@ export default function Cal(props: CalProps) {
     };
 
     useEffect(() => {
-        setBoxes(props.events);
+        setBoxes(
+            props.events.map((event, i) => {
+                return {
+                    ...event,
+                };
+            })
+        );
         recalOverlapData(props.events);
     }, [props.events]);
+
+    const Renderer = props.Renderer;
 
     return (
         <div>
@@ -182,7 +197,7 @@ export default function Cal(props: CalProps) {
                                 top={box.UY * props.unitYHeightPx}
                                 left={box.UX * props.unitXWidthPx + props.sideRowWidthPx}
                                 overlapData={boxOverlapData}
-                                comp={box.comp}
+                                comp={<Renderer {...box.comp}/>}
                                 onDrag={(mousePosPx, initialMousePosPx, initialBoxPosPx) => {
                                     //@ts-ignore
                                     const nodePosPx = {
@@ -214,22 +229,37 @@ export default function Cal(props: CalProps) {
                                 heightPx={box.UH * props.unitYHeightPx}
                                 widthPx={1 * props.unitXWidthPx}
                                 onResize={(heightPx: number) => {
-                                    const newBoxes = [...boxes];
+                                    // let newBoxes = boxes.map((b) => {
+                                    //     return {
+                                    //         ...b,
+                                    //     }
+                                    // });
+                                    let newBoxes = [...boxes];
                                     newBoxes[i].UH = Math.round(heightPx / props.unitYHeightPx);
                                     setBoxes(newBoxes);
-
                                     recalOverlapData(newBoxes);
                                 }}
                                 BG={box.BG}
                                 onDrop={async () => {
                                     if (props.onDrop) {
-                                        const result = await props.onDrop({
+                                        const isDataEventSuccessfullyChanged = await props.onDrop({
                                             index: i,
                                             UX: box.UX,
                                             UY: box.UY,
                                         });
-
-                                        if (result === false) {
+                                        if (!isDataEventSuccessfullyChanged) {
+                                            setBoxes(props.events);
+                                            recalOverlapData(props.events);
+                                        }
+                                    }
+                                }}
+                                onResizeComplete={async function() {
+                                    if (props.onResizeComplete) {
+                                        const isDataEventSuccessfullyChanged = await props.onResizeComplete({
+                                            index: i,
+                                            UH: boxes[i].UH,
+                                        });
+                                        if (!isDataEventSuccessfullyChanged) {
                                             setBoxes(props.events);
                                             recalOverlapData(props.events);
                                         }
@@ -245,10 +275,11 @@ export default function Cal(props: CalProps) {
 }
 
 function Column(props: {
-    singleYUnitPx: number;
-    yUnitCount: number;
-    singleXUnitPx: number;
-}) {
+                    singleYUnitPx: number;
+                    yUnitCount: number;
+                    singleXUnitPx: number;
+                },
+) {
 
     return (
         <div
@@ -299,6 +330,7 @@ interface BoxProps {
     comp: ReactNode;
     BG?: string;
     onDrop?: () => void;
+    onResizeComplete?: () => void;
 }
 
 function Box(props: BoxProps) {
@@ -327,13 +359,17 @@ function Box(props: BoxProps) {
     };
 
     const handleMouseUp = (e) => {
-        setDragging(false);
         setEnableDragging(false);
-        setResizeDragging(false);
-
         if (dragging && !resizeDragging && props.onDrop) {
             props.onDrop();
         }
+
+        if (resizeDragging && props.onResizeComplete) {
+            props.onResizeComplete();
+        }
+        setDragging(false);
+        setResizeDragging(false);
+
 
         setInitialMousePosition(undefined);
         setInitialBoxPosition(undefined);

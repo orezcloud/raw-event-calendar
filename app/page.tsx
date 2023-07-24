@@ -1,9 +1,31 @@
 'use client';
 import Cal from '@/cal';
-import {ReactNode} from 'react';
+import {ReactNode, useState} from 'react';
 
 
 export default function Home() {
+
+    const [count, setCount] = useState(0);
+    const [events, setEvents] = useState([
+        {
+            comp: {
+                id: 1,
+            },
+            UY: 10,
+            UX: 1,
+            UH: 10,
+            BG: 'white',
+        },
+        {
+            comp: {
+                id: 2,
+            },
+            UY: 13,
+            UX: 1,
+            UH: 10,
+            BG: '#ccc',
+        },
+    ]);
 
     return (
         <main>
@@ -28,30 +50,7 @@ export default function Home() {
                             header: 'Thing',
                         },
                     ]}
-                    events={[
-                        {
-                            comp: (
-                                <div className={'text-black'}>
-                                    <span>Event 1</span>
-                                </div>
-                            ),
-                            UY: 10,
-                            UX: 1,
-                            UH: 10,
-                            BG: 'white',
-                        },
-                        {
-                            comp: (
-                                <div className={'text-black'}>
-                                    <span>Event 2</span>
-                                </div>
-                            ),
-                            UY: 12,
-                            UX: 1,
-                            UH: 10,
-                            BG: '#ddd',
-                        }
-                    ]}
+                    events={events}
                     unitYHeightPx={10}
                     unitXWidthPx={200}
                     yUnitCount={12 * 24}
@@ -74,12 +73,66 @@ export default function Home() {
                         return row;
                     })()}
                     sideRowWidthPx={30}
-                    onDrop={(data) => {
-                        return true;
+                    Renderer={Renderer}
+                    onDrop={async ({UX, UY, index}) => {
+                        if (count) {
+                            console.log('------------------ SHOULD RENDER');
+                        } else {
+                            console.log('------------------');
+                        }
+                        if (count) {
+                            let newEvents = [...events];
+                            newEvents[index] = {
+                                ...newEvents[index],
+                                UX,
+                                UY,
+                            };
+                            setEvents(newEvents);
+                            setCount(0);
+                            return true;
+                        } else {
+                            setCount(1);
+                            return false;
+                        }
+                    }}
+                    onResizeComplete={async ({UH, index}) => {
+                        if (count) {
+                            console.log('------------------ SHOULD RENDER');
+                        } else {
+                            console.log('------------------');
+                        }
+                        console.log('in', index, 'UH', UH);
+                        console.log('ev', events[index]);
+                        if (count) {
+                            let newEvents = [...events];
+                            newEvents[index] = {
+                                ...newEvents[index],
+                                UH,
+                            };
+                            setEvents(newEvents);
+                            setCount(0);
+                            return true;
+                        } else {
+                            setCount(1);
+                            return false;
+                        }
                     }}
                 />
             </div>
         </main>
+    );
+}
+
+interface RendererProps {
+    id: number;
+}
+
+function Renderer(props: RendererProps) {
+    return (
+        <div>
+            <span>{props.id}</span>
+            adsf
+        </div>
     );
 }
 
